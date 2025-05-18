@@ -7,7 +7,7 @@ import Complaint from "../models/complaint"
 import Notification from "../models/notification"
 
 export const userController = {
-    
+
   // Get all users with pagination and filtering
   getAllUsers: async (req: Request, res: Response) => {
     try {
@@ -74,15 +74,15 @@ export const userController = {
       const { id } = req.params
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-         res.status(400).json({ message: "Invalid user ID" })
-         return
+        res.status(400).json({ message: "Invalid user ID" })
+        return
       }
 
       const user = await User.findById(id).select("-password").populate("district", "name").populate("sector", "name")
 
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
       res.status(200).json(user)
@@ -94,14 +94,19 @@ export const userController = {
 
   // Create a new user (admin function)
   createUser: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const { firstName, lastName, email, password, phone, role, district, sector, address } = req.body
 
       // Check if user already exists
-      const existingUser = await User.findOne({ email })
+      const existingUser = await User.findOne({ email }).session(session)
       if (existingUser) {
-         res.status(400).json({ message: "User with this email already exists" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "User with this email already exists" })
+        return
       }
 
       // Hash password
@@ -122,14 +127,17 @@ export const userController = {
         isActive: true,
       })
 
-      await newUser.save()
+      await newUser.save({ session })
 
       // Send welcome email
       await sendEmail(
-         email,
-         "Welcome to Citizen Engagement Platform",
-         `Hello ${firstName},\n\nYour account has been created successfully. Your temporary password is: ${password}\n\nPlease login and change your password immediately.\n\nRegards,\nCitizen Engagement Platform Team`,
+        email,
+        "Welcome to Citizen Engagement Platform",
+        `Hello ${firstName},\n\nYour account has been created successfully. Your temporary password is: ${password}\n\nPlease login and change your password immediately.\n\nRegards,\nCitizen Engagement Platform Team`,
       )
+
+      await session.commitTransaction()
+      session.endSession()
 
       res.status(201).json({
         message: "User created successfully",
@@ -139,6 +147,8 @@ export const userController = {
         },
       })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error creating user:", error)
       res.status(500).json({ message: "Failed to create user", error: (error as Error).message })
     }
@@ -146,28 +156,37 @@ export const userController = {
 
   // Update user
   updateUser: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const { id } = req.params
       const { firstName, lastName, email, phone, role, district, sector, address, isActive } = req.body
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-         res.status(400).json({ message: "Invalid user ID" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "Invalid user ID" })
+        return
       }
 
       // Check if user exists
-      const user = await User.findById(id)
+      const user = await User.findById(id).session(session)
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
       // Check if email is being changed and if it's already in use
       if (email && email !== user.email) {
-        const existingUser = await User.findOne({ email })
+        const existingUser = await User.findOne({ email }).session(session)
         if (existingUser) {
-           res.status(400).json({ message: "Email is already in use" })
-           return
+          await session.abortTransaction()
+          session.endSession()
+          res.status(400).json({ message: "Email is already in use" })
+          return
         }
       }
 
@@ -182,20 +201,21 @@ export const userController = {
           role: role || user.role,
           district: district || user.district,
           sector: sector || user.sector,
-          //@ts-ignore
-          address: address || user.address,
-          //@ts-ignore
-          isActive: isActive !== undefined ? isActive : user.isActive,
           updatedAt: new Date(),
         },
-        { new: true },
+        { new: true, session }
       ).select("-password")
+
+      await session.commitTransaction()
+      session.endSession()
 
       res.status(200).json({
         message: "User updated successfully",
         user: updatedUser,
       })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error updating user:", error)
       res.status(500).json({ message: "Failed to update user", error: (error as Error).message })
     }
@@ -203,38 +223,43 @@ export const userController = {
 
   // Delete user
   deleteUser: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const { id } = req.params
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-         res.status(400).json({ message: "Invalid user ID" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "Invalid user ID" })
+        return
       }
 
-      // Check if user exists
-      const user = await User.findById(id)
+      const user = await User.findById(id).session(session)
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
-      // Check if user has complaints
-      const complaintsCount = await Complaint.countDocuments({ submittedBy: id })
-      if (complaintsCount > 0) {
-        // Soft delete - deactivate user instead of deleting
-        await User.findByIdAndUpdate(id, { isActive: false })
-         res.status(200).json({ message: "User has been deactivated because they have associated complaints" })
-         return
-      }
-
-      // Hard delete if no complaints
-      await User.findByIdAndDelete(id)
+      // Delete user's complaints
+      await Complaint.deleteMany({ submittedBy: id }).session(session)
 
       // Delete user's notifications
-      await Notification.deleteMany({ user: id })
+      await Notification.deleteMany({ recipient: id }).session(session)
 
-      res.status(200).json({ message: "User deleted successfully" })
+      // Delete the user
+      await User.findByIdAndDelete(id).session(session)
+
+      await session.commitTransaction()
+      session.endSession()
+
+      res.status(200).json({ message: "User and associated data deleted successfully" })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error deleting user:", error)
       res.status(500).json({ message: "Failed to delete user", error: (error as Error).message })
     }
@@ -242,27 +267,36 @@ export const userController = {
 
   // Change user password
   changePassword: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const { id } = req.params
       const { currentPassword, newPassword } = req.body
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-         res.status(400).json({ message: "Invalid user ID" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "Invalid user ID" })
+        return
       }
 
       // Check if user exists
-      const user = await User.findById(id)
+      const user = await User.findById(id).session(session)
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
       // Verify current password
       const isMatch = await bcrypt.compare(currentPassword, user.password)
       if (!isMatch) {
-         res.status(400).json({ message: "Current password is incorrect" })
-         return
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "Current password is incorrect" })
+        return
       }
 
       // Hash new password
@@ -272,10 +306,15 @@ export const userController = {
       // Update password
       user.password = hashedPassword
       user.updatedAt = new Date()
-      await user.save()
+      await user.save({ session })
+
+      await session.commitTransaction()
+      session.endSession()
 
       res.status(200).json({ message: "Password changed successfully" })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error changing password:", error)
       res.status(500).json({ message: "Failed to change password", error: (error as Error).message })
     }
@@ -287,15 +326,15 @@ export const userController = {
       const { id } = req.params
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
-         res.status(400).json({ message: "Invalid user ID" })
-         return
+        res.status(400).json({ message: "Invalid user ID" })
+        return
       }
 
       // Check if user exists
       const user = await User.findById(id)
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
       // Generate random password
@@ -313,8 +352,8 @@ export const userController = {
       // Send email with new password
       await sendEmail(
         user.email,
-         "Password Reset - Citizen Engagement Platform",
-     `Hello ${user.firstName},\n\nYour password has been reset. Your new temporary password is: ${tempPassword}\n\nPlease login and change your password immediately.\n\nRegards,\nCitizen Engagement Platform Team`,
+        "Password Reset - Citizen Engagement Platform",
+        `Hello ${user.firstName},\n\nYour password has been reset. Your new temporary password is: ${tempPassword}\n\nPlease login and change your password immediately.\n\nRegards,\nCitizen Engagement Platform Team`,
       )
 
       res
@@ -338,8 +377,8 @@ export const userController = {
         .populate("sector", "name")
 
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
       res.status(200).json(user)
@@ -358,8 +397,8 @@ export const userController = {
 
       const user = await User.findById(userId)
       if (!user) {
-         res.status(404).json({ message: "User not found" })
-         return
+        res.status(404).json({ message: "User not found" })
+        return
       }
 
       // Update user profile
@@ -465,5 +504,5 @@ export const userController = {
       res.status(500).json({ message: "Failed to get user statistics", error: (error as Error).message })
     }
   },
-  
+
 }

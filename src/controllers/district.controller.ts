@@ -99,14 +99,39 @@ export const districtController = {
   },
 
   // Create a new district
-  createDistrict: async (req: any, res: Response) => {
-    try {
-      const { name, province } = req.body
+  createDistrict: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
 
-      // Check if district already exists
-      const existingDistrict = await District.findOne({ name })
+    try {
+      const { name, province, organization, email, phone } = req.body
+
+      // Check if organization exists
+      if (!mongoose.Types.ObjectId.isValid(organization)) {
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "Invalid organization ID" })
+        return
+      }
+
+      const organizationExists = await Organization.findById(organization).session(session)
+      if (!organizationExists) {
+        await session.abortTransaction()
+        session.endSession()
+        res.status(404).json({ message: "Organization not found" })
+        return
+      }
+
+      // Check if district already exists in this organization
+      const existingDistrict = await District.findOne({
+        name,
+        organization
+      }).session(session)
+
       if (existingDistrict) {
-        res.status(400).json({ message: "District with this name already exists" })
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "District with this name already exists in this organization" })
         return
       }
 
@@ -114,19 +139,46 @@ export const districtController = {
       const newDistrict = new District({
         name,
         province,
-        organization: req.user.organization,
-
-
+        organization,
+        active: false
       })
-      const organization = await Organization.findById(newDistrict.organization)
-      organization?.districts.push(newDistrict._id as Types.ObjectId)
-      await newDistrict.save()
+
+      await newDistrict.save({ session })
+
+      // Create admin user for the district
+      const adminUser = new User({
+        firstName: "Admin",
+        lastName: name,
+        email: email,
+        password: "ChangeMe123!",
+        phone: phone,
+        role: "districtadmin",
+        organization: organization,
+        district: newDistrict._id
+      })
+
+      await adminUser.save({ session })
+
+      //@ts-expect-error err
+      newDistrict.admin = adminUser._id
+      await newDistrict.save({ session })
+
+      await session.commitTransaction()
+      session.endSession()
 
       res.status(201).json({
-        message: "District created successfully",
-        district: newDistrict,
+        message: "District created successfully with admin account",
+        district: {
+          ...newDistrict.toObject(),
+          admin: {
+            id: adminUser._id,
+            email: adminUser.email
+          }
+        }
       })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error creating district:", error)
       res.status(500).json({ message: "Failed to create district", error: (error as Error).message })
     }
@@ -134,52 +186,79 @@ export const districtController = {
 
   // Update district
   updateDistrict: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const { id } = req.params
-      const { name, description, location, contactInfo } = req.body
+      const { name, province, email, phone, active } = req.body
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
+        await session.abortTransaction()
+        session.endSession()
         res.status(400).json({ message: "Invalid district ID" })
         return
       }
 
-      // Check if district exists
-      const district = await District.findById(id)
+      const district = await District.findById(id).session(session)
       if (!district) {
+        await session.abortTransaction()
+        session.endSession()
         res.status(404).json({ message: "District not found" })
         return
       }
 
-      // Check if name is being changed and if it's already in use
+      // If name is being updated, check for uniqueness within organization
       if (name && name !== district.name) {
-        const existingDistrict = await District.findOne({ name })
+        const existingDistrict = await District.findOne({
+          name,
+          organization: district.organization,
+          _id: { $ne: id }
+        }).session(session)
+
         if (existingDistrict) {
-          res.status(400).json({ message: "District name is already in use" })
+          await session.abortTransaction()
+          session.endSession()
+          res.status(400).json({ message: "District name already exists in this organization" })
           return
         }
       }
 
-      // Update district
-      const updatedDistrict = await District.findByIdAndUpdate(
-        id,
-        {
-          name: name || district.name,
-          //@ts-ignore
-          description: description || district.description,
-          //@ts-ignore
-          location: location || district.location,
-          //@ts-ignore
-          contactInfo: contactInfo || district.contactInfo,
-          updatedAt: new Date(),
-        },
-        { new: true },
-      )
+      // Update district fields
+      if (name) district.name = name
+      if (province) district.province = province
+      if (active !== undefined) district.active = active
+
+      await district.save({ session })
+
+      // If email is updated, also update admin user's email
+      if (email && district.admin) {
+        await User.findByIdAndUpdate(
+          district.admin,
+          { email },
+          { session }
+        )
+      }
+
+      // If phone is updated, also update admin user's phone
+      if (phone && district.admin) {
+        await User.findByIdAndUpdate(
+          district.admin,
+          { phone },
+          { session }
+        )
+      }
+
+      await session.commitTransaction()
+      session.endSession()
 
       res.status(200).json({
         message: "District updated successfully",
-        district: updatedDistrict,
+        district
       })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error updating district:", error)
       res.status(500).json({ message: "Failed to update district", error: (error as Error).message })
     }
@@ -187,57 +266,60 @@ export const districtController = {
 
   // Delete district
   deleteDistrict: async (req: Request, res: Response) => {
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
     try {
       const { id } = req.params
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
+        await session.abortTransaction()
+        session.endSession()
         res.status(400).json({ message: "Invalid district ID" })
         return
       }
 
-      // Check if district exists
-      const district = await District.findById(id)
+      const district = await District.findById(id).session(session)
       if (!district) {
+        await session.abortTransaction()
+        session.endSession()
         res.status(404).json({ message: "District not found" })
         return
-
       }
 
-      // Check if district has sectors
-      const sectorCount = await Sector.countDocuments({ district: id })
-      if (sectorCount > 0) {
-        res.status(400).json({
-          message: "Cannot delete district with associated sectors. Please delete all sectors first.",
-          sectorCount,
-        })
-        return
+      // Delete all sectors in this district
+      const sectors = await Sector.find({ district: id }).session(session)
+
+      // Delete all users in these sectors
+      for (const sector of sectors) {
+        await User.deleteMany({ sector: sector._id }).session(session)
+        await Complaint.deleteMany({ sector: sector._id }).session(session)
       }
 
-      // Check if district has users
-      const userCount = await User.countDocuments({ district: id })
-      if (userCount > 0) {
-        res.status(400).json({
-          message: "Cannot delete district with associated users. Please reassign or delete users first.",
-          userCount,
-        })
-        return
+      // Delete all sectors
+      await Sector.deleteMany({ district: id }).session(session)
+
+      // Delete district admin user
+      if (district.admin) {
+        await User.findByIdAndDelete(district.admin).session(session)
       }
 
-      // Check if district has complaints
-      const complaintCount = await Complaint.countDocuments({ district: id })
-      if (complaintCount > 0) {
-        res.status(400).json({
-          message: "Cannot delete district with associated complaints.",
-          complaintCount,
-        })
-        return
-      }
+      // Delete all users in this district
+      await User.deleteMany({ district: id }).session(session)
 
-      // Delete district
-      await District.findByIdAndDelete(id)
+      // Delete all complaints in this district
+      await Complaint.deleteMany({ district: id }).session(session)
 
-      res.status(200).json({ message: "District deleted successfully" })
+      // Delete the district
+      await District.findByIdAndDelete(id).session(session)
+
+      await session.commitTransaction()
+      session.endSession()
+
+      res.status(200).json({ message: "District and all associated data deleted successfully" })
     } catch (error) {
+      await session.abortTransaction()
+      session.endSession()
       console.error("Error deleting district:", error)
       res.status(500).json({ message: "Failed to delete district", error: (error as Error).message })
     }

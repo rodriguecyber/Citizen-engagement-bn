@@ -1,4 +1,5 @@
 import type { Request, Response } from "express"
+import mongoose from "mongoose"
 import Organization from "../models/organization"
 import User from "../models/user"
 import District from "../models/district"
@@ -6,14 +7,19 @@ import Sector from "../models/sector"
 
 // Create a new organization with admin
 export const createOrganization = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
   try {
     const { name, services, location, email, tel } = req.body
 
     // Check if organization already exists
-    const organizationExists = await Organization.findOne({ name })
+    const organizationExists = await Organization.findOne({ name }).session(session)
     if (organizationExists) {
-       res.status(400).json({ message: "Organization already exists with this name" })
-       return
+      await session.abortTransaction()
+      session.endSession()
+      res.status(400).json({ message: "Organization already exists with this name" })
+      return
     }
 
     // Create organization without admin initially
@@ -23,27 +29,29 @@ export const createOrganization = async (req: Request, res: Response) => {
       location,
       email,
       tel,
-
     })
 
-    await organization.save()
+    await organization.save({ session })
 
     const adminUser = new User({
       firstName: "Admin",
       lastName: name,
       email: email,
-      password: "ChangeMe123!", 
+      password: "ChangeMe123!",
       phone: tel,
       role: "orgadmin",
       organization: organization._id,
     })
 
-    await adminUser.save()
+    await adminUser.save({ session })
 
     // Update organization with admin reference
     //@ts-ignore
     organization.admin = adminUser._id
-    await organization.save()
+    await organization.save({ session })
+
+    await session.commitTransaction()
+    session.endSession()
 
     res.status(201).json({
       message: "Organization created successfully with admin account",
@@ -57,6 +65,8 @@ export const createOrganization = async (req: Request, res: Response) => {
       },
     })
   } catch (error) {
+    await session.abortTransaction()
+    session.endSession()
     console.error("Create organization error:", error)
     res.status(500).json({ message: "Server error during organization creation" })
   }
@@ -66,15 +76,15 @@ export const createOrganization = async (req: Request, res: Response) => {
 export const getOrganizations = async (req: Request, res: Response) => {
   try {
     const organizations = await Organization.find()
-    .populate("admin", "firstName lastName email phone")
-    .populate({
-      path: "districts",
-      populate: {
-        path: "sectors",
-        model: "Sector",
-      },
-    })
-    .select("-__v");
+      .populate("admin", "firstName lastName email phone")
+      .populate({
+        path: "districts",
+        populate: {
+          path: "sectors",
+          model: "Sector",
+        },
+      })
+      .select("-__v");
 
     res.status(200).json(organizations)
   } catch (error) {
@@ -93,8 +103,8 @@ export const getOrganizationById = async (req: Request, res: Response) => {
       .select("-__v")
 
     if (!organization) {
-       res.status(404).json({ message: "Organization not found" })
-       return
+      res.status(404).json({ message: "Organization not found" })
+      return
     }
 
     res.status(200).json(organization)
@@ -106,13 +116,33 @@ export const getOrganizationById = async (req: Request, res: Response) => {
 
 // Update organization
 export const updateOrganization = async (req: Request, res: Response) => {
-  try {
-    const { name, services, location, email, tel, maxServiceDays } = req.body
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
-    const organization = await Organization.findById(req.params.id)
+  try {
+    const { name, services, location, email, tel } = req.body
+
+    // If name is being updated, check for uniqueness
+    if (name) {
+      const existingOrg = await Organization.findOne({
+        name,
+        _id: { $ne: req.params.id }
+      }).session(session)
+
+      if (existingOrg) {
+        await session.abortTransaction()
+        session.endSession()
+        res.status(400).json({ message: "Organization name already exists" })
+        return
+      }
+    }
+
+    const organization = await Organization.findById(req.params.id).session(session)
     if (!organization) {
-       res.status(404).json({ message: "Organization not found" })
-       return
+      await session.abortTransaction()
+      session.endSession()
+      res.status(404).json({ message: "Organization not found" })
+      return
     }
 
     // Update fields
@@ -121,15 +151,28 @@ export const updateOrganization = async (req: Request, res: Response) => {
     if (location) organization.location = location
     if (email) organization.email = email
     if (tel) organization.tel = tel
-    // if (maxServiceDays) organization.maxServiceDays = maxServiceDays
 
-    await organization.save()
+    await organization.save({ session })
+
+    // If email is updated, also update admin user's email
+    if (email && organization.admin) {
+      await User.findByIdAndUpdate(
+        organization.admin,
+        { email },
+        { session }
+      )
+    }
+
+    await session.commitTransaction()
+    session.endSession()
 
     res.status(200).json({
       message: "Organization updated successfully",
       organization,
     })
   } catch (error) {
+    await session.abortTransaction()
+    session.endSession()
     console.error("Update organization error:", error)
     res.status(500).json({ message: "Server error updating organization" })
   }
@@ -137,22 +180,44 @@ export const updateOrganization = async (req: Request, res: Response) => {
 
 // Delete organization
 export const deleteOrganization = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession()
+  session.startTransaction()
+
   try {
-    const organization = await Organization.findById(req.params.id)
+    const organization = await Organization.findById(req.params.id).session(session)
     if (!organization) {
-       res.status(404).json({ message: "Organization not found" })
-       return
+      await session.abortTransaction()
+      session.endSession()
+      res.status(404).json({ message: "Organization not found" })
+      return
     }
+
+    // Delete associated districts and their sectors
+    const districts = await District.find({ organization: organization._id }).session(session)
+
+    // Delete all sectors in these districts
+    for (const district of districts) {
+      await Sector.deleteMany({ district: district._id }).session(session)
+    }
+
+    // Delete all districts
+    await District.deleteMany({ organization: organization._id }).session(session)
 
     // Delete associated admin user
     if (organization.admin) {
-      await User.findByIdAndDelete(organization.admin)
+      await User.findByIdAndDelete(organization.admin).session(session)
     }
 
-    await Organization.findByIdAndDelete(req.params.id)
+    // Delete the organization
+    await Organization.findByIdAndDelete(req.params.id).session(session)
 
-    res.status(200).json({ message: "Organization deleted successfully" })
+    await session.commitTransaction()
+    session.endSession()
+
+    res.status(200).json({ message: "Organization and all associated data deleted successfully" })
   } catch (error) {
+    await session.abortTransaction()
+    session.endSession()
     console.error("Delete organization error:", error)
     res.status(500).json({ message: "Server error deleting organization" })
   }
@@ -168,8 +233,8 @@ export const getOrganizationStatistics = async (req: Request, res: Response) => 
 
     const organization = await Organization.findById(organizationId)
     if (!organization) {
-       res.status(404).json({ message: "Organization not found" })
-       return
+      res.status(404).json({ message: "Organization not found" })
+      return
     }
 
     // Count districts
@@ -219,8 +284,8 @@ export const getOrganizationDistricts = async (req: Request, res: Response) => {
 
     const organization = await Organization.findById(organizationId)
     if (!organization) {
-       res.status(404).json({ message: "Organization not found" })
-       return
+      res.status(404).json({ message: "Organization not found" })
+      return
     }
 
     const districts = await District.find({ organization: organizationId })

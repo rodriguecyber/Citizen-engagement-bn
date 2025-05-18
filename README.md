@@ -75,6 +75,8 @@ This repository contains the backend service for the  Citizen Engagement  System
 - Error rate tracking
 - API endpoint availability
 - Database query optimization
+- I implemented  ACID  (Atomicity, Consistency, Isolation, Durability) principles on request with multiple dtabase      
+  operation  
 
 ## Getting Started
 
@@ -116,11 +118,10 @@ Required environment variables are documented in `.env.example`. Key variables i
 - `SMTP_FROM_EMAIL` = sender email
 - `PORT` = server port
 - `MONGODB_URI` =`mongodb connetction string with database name like mongodb://localhost:27017/citizen-engagement
-- JWT_SECRET = JWT secret 
-- SMTP_HOST =  smt host
-
-SMTP_PORT= smtp port
-SMTP_USER= smtp user
-SMTP_PASSWORD=smtp password
+- `JWT_SECRET` = JWT secret 
+- `SMTP_HOST` =  smt host
+- `SMTP_PORT`= smtp port
+- `SMTP_USER`= smtp user
+- `SMTP_PASSWORD`=smtp password
 
 
