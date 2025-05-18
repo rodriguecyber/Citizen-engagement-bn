@@ -112,6 +112,8 @@ Required environment variables are documented in `.env.example`. Key variables i
 - `CLOUDINARY_API_KEY`= cloudinary cloud api key
 - `CLOUDINARY_API_SECRET`= cloudinary spi secret
 - `NODE_ENV` = node environment
+- `SMTP_FROM_NAM` = name of sender
+- `SMTP_FROM_EMAIL` = sender email
 - `PORT` = server port
 - `MONGODB_URI` =`mongodb connetction string with database name like mongodb://localhost:27017/citizen-engagement
 - JWT_SECRET = JWT secret 

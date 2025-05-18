@@ -29,13 +29,13 @@ mongoose
   .catch((err) => console.error("MongoDB connection error:", err))
 
 // Routes
-app.use("/api/auth", authRoutes)
-app.use("/api/organizations", organizationRoutes)
-app.use("/api/districts", districtRoutes)
-app.use("/api/sectors", sectorRoutes)
-app.use("/api/complaints", complaintRoutes)
-app.use("/api/users", userRoutes)
-app.use("/api/notifications", notificationRoutes)
+app.use("/api/v1/auth", authRoutes)
+app.use("/api/v1/organizations", organizationRoutes)
+app.use("/api/v1/districts", districtRoutes)
+app.use("/api/v1/sectors", sectorRoutes)
+app.use("/api/v1/complaints", complaintRoutes)
+app.use("/api/v1/users", userRoutes)
+app.use("/api/v1/notifications", notificationRoutes)
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
