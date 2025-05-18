@@ -108,28 +108,17 @@ npm run dev
 ### Environment Variables
 Required environment variables are documented in `.env.example`. Key variables include:
 
-- CLOUDINARY_CLOUD_NAME= `cloudinary cloud name`
-- CLOUDINARY_API_KEY= `cloudinary cloud api key`
-- CLOUDINARY_API_SECRET=l ` cloudinary spi secret`
-- NODE_ENV = `node environment`
-- PORT = `server port`
-- MONGODB_URI = `mongodb connetction string with database name like mongodb://localhost:27017/citizen-engagement`
-- JWT_SECRET = `JWT secret `
-- SMTP_HOST =  `smt host`
+- `CLOUDINARY_CLOUD_NAME`= cloudinary cloud name
+- `CLOUDINARY_API_KEY`= cloudinary cloud api key
+- `CLOUDINARY_API_SECRET`= cloudinary spi secret
+- `NODE_ENV` = node environment
+- `PORT` = server port
+- `MONGODB_URI` =`mongodb connetction string with database name like mongodb://localhost:27017/citizen-engagement
+- JWT_SECRET = JWT secret 
+- SMTP_HOST =  smt host
 
-SMTP_PORT= `smtp port` 
-SMTP_USER= `smtp user`
-SMTP_PASSWORD=`smtp password`
+SMTP_PORT= smtp port
+SMTP_USER= smtp user
+SMTP_PASSWORD=smtp password
 
 
-## Testing
-```bash
-# Run unit tests
-npm run test
-
-# Run integration tests
-npm run test:integration
-
-# Run with coverage
-npm run test:coverage
-```
