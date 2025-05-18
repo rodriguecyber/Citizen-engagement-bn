@@ -4,8 +4,7 @@ import User, { type IUser } from "../models/user"
 import Organization from "../models/organization"
 
 // Hardcoded JWT secret (for development only)
-const HARDCODED_JWT_SECRET = "citizen-engagement-jwt-secret-key-2024"
-const JWT_SECRET = process.env.JWT_SECRET || HARDCODED_JWT_SECRET
+const JWT_SECRET = process.env.JWT_SECRET!
 
 // Generate JWT token
 const generateToken = (user: IUser) => {
@@ -242,10 +241,6 @@ export const forgotPassword = async (req: Request, res: Response) => {
     // Generate reset token (in a real app, you would store this securely)
     const resetToken = Math.random().toString(36).substring(2, 15)
 
-    // In a real app, you would:
-    // 1. Store the token in the database with an expiration
-    // 2. Send an email with a reset link
-
     // For this example, we'll just simulate success
     res.status(200).json({ message: "If your email is registered, you will receive a password reset link" })
   } catch (error) {
@@ -264,10 +259,6 @@ export const resetPassword = async (req: Request, res: Response) => {
        return
     }
 
-    // In a real app, you would:
-    // 1. Verify the token from the database
-    // 2. Check if it's expired
-    // 3. Find the user associated with the token
 
     // For this example, we'll just simulate success
     res.status(200).json({ message: "Password has been reset successfully" })

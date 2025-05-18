@@ -69,8 +69,7 @@ export const createComplaintUpdateNotification = async (
         title = `Update on your complaint #${complaint.title}`
     }
 
-    // Determine who should receive the notification
-    // If updated by citizen, notify admin
+   
     // If updated by admin, notify citizen
     if (updatedBy === complaint.citizen.toString()) {
       // Notify sector admin

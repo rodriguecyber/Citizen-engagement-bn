@@ -118,7 +118,7 @@ export const districtController = {
 
 
       })
-      const organization= await Organization.findById(newDistrict.organization)
+      const organization = await Organization.findById(newDistrict.organization)
       organization?.districts.push(newDistrict._id as Types.ObjectId)
       await newDistrict.save()
 
@@ -609,28 +609,28 @@ export const districtController = {
       res.status(500).json({ message: "Failed to get district users", error: (error as Error).message })
     }
   },
-   assignAdminToDistrict: async(req:Request,res:Response)=>{
+  assignAdminToDistrict: async (req: Request, res: Response) => {
     try {
-    const {name,phone,email}=req.body
-    const admin = new User({
-      firstName:name.split(' ')[0],
-      lastName:name.split(' ').filter((n:any,index:number)=>index!==0).join(' ') ||' ',
-      phone,
-      password:'ChangeMe123!',
-      role:'districtadmin',
-      email,
-      district:req.params.id
-    })
-    await District.findOneAndUpdate({organization:req.user.organization},{
-      active:true,
-      admin:admin._id
-    })
-    await admin.save()
-    res.status(200).json({ message: "distict get admin"})
+      const { name, phone, email } = req.body
+      const admin = new User({
+        firstName: name.split(' ')[0],
+        lastName: name.split(' ').filter((n: any, index: number) => index !== 0).join(' ') || ' ',
+        phone,
+        password: 'ChangeMe123!',
+        role: 'districtadmin',
+        email,
+        district: req.params.id
+      })
+      await District.findOneAndUpdate({ organization: req.user.organization }, {
+        active: true,
+        admin: admin._id
+      })
+      await admin.save()
+      res.status(200).json({ message: "distict get admin" })
     } catch (error) {
       res.status(500).json({ message: "Failed to assign admin to district", error: (error as Error).message })
-      
+
     }
-    
+
   }
 }

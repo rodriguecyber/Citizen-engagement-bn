@@ -41,10 +41,5 @@ router.post("/:id/comments", authenticate, complaintController.addComment)
 // Escalate a complaint
 router.post("/:id/escalate", authenticate,  complaintController.escalateComplaint)
 
-// Add feedback to a resolved complaint (citizens only)
-// router.post("/:id/feedback", authenticate, authorize("citizen"), complaintController.addFeedback)
-
-// Confirm resolution (citizens only)
-// router.post("/:id/confirm-resolution", authenticate, authorize("citizen"), complaintController.confirmResolution)
 
 export default router

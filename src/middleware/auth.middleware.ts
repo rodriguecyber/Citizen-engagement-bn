@@ -3,8 +3,7 @@ import jwt from "jsonwebtoken"
 import User from "../models/user"
 
 // Hardcoded JWT secret (for development only)
-const HARDCODED_JWT_SECRET = "citizen-engagement-jwt-secret-key-2024"
-const JWT_SECRET = process.env.JWT_SECRET || HARDCODED_JWT_SECRET
+const JWT_SECRET = process.env.JWT_SECRET! 
 
 interface DecodedToken {
   id: string

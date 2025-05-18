@@ -28,7 +28,4 @@ router.get("/:id/statistics", authenticate, sectorController.getSectorStats)
 // Assign admin to sector
 router.post("/:id/assign-admin", authenticate, authorize("districtadmin"), sectorController.assignAdminToSector)
 
-// Add cells to sector
-// router.post("/:id/cells", authenticate, authorize("districtadmin", "sectoradmin"), sectorController.addCellsToSector)
-
 export default router

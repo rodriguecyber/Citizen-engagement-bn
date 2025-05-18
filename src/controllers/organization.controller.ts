@@ -192,7 +192,7 @@ export const getOrganizationStatistics = async (req: Request, res: Response) => 
     })
 
     // Get complaint statistics (if complaint model exists)
-    // This is a placeholder - implement based on your complaint model
+    // This is a placeholder - to be implemented later
     const complaintStats = {
       total: 0,
       resolved: 0,

@@ -10,23 +10,7 @@ import path from "path"
 import fs from "fs"
 import { v4 as uuidv4 } from 'uuid';
 
-// Configure file upload
-const uploadDir = path.join(process.cwd(), "uploads", "complaints")
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true })
-}
 
-
-// Function to calculate due date based on organization's max service days
-const calculateDueDate = async (organizationId: string) => {
-  try {
-    const organization = await Organization.findById(organizationId)
-    return addDays(new Date(), 7) // Default to 7 days
-  } catch (error) {
-    console.error("Error calculating due date:", error)
-    return addDays(new Date(), 7) // Default to 7 days if there's an error
-  }
-}
 
 // Function to generate complaint ID
 const generateComplaintId = async () => {
@@ -87,7 +71,7 @@ export const createComplaint = async (req: Request, res: Response) => {
 
     // Create new complaint
     const complaint = new Complaint({
-      complaintId:uuidv4(),
+      complaintId:generateComplaintId(),
       title,
       description,
       service,
@@ -307,14 +291,6 @@ export const updateComplaintStatus = async (req: Request, res: Response) => {
       return
     }
 
-
-
-    // // Validate status transition
-    // if (!isValidStatusTransition(complaint.status, status as ComplaintStatus, userRole)) {
-    //   res.status(400).json({ message: "Invalid status transition" })
-    //   return
-    // }
-
     // Update complaint
     complaint.status = status as ComplaintStatus
     complaint.comments.push({
@@ -332,7 +308,6 @@ export const updateComplaintStatus = async (req: Request, res: Response) => {
     await complaint.save()
 
     // Notify relevant users
-    await notifyStatusUpdate(complaint, status as ComplaintStatus, userRole)
 
     res.status(200).json({
       message: "Complaint status updated successfully",
@@ -369,9 +344,6 @@ export const addComment = async (req: Request, res: Response) => {
       return
     }
 
-    // Handle file uploads if any
-
-
     // Add comment with attachments
     const newComment = {
       text,
@@ -382,13 +354,8 @@ export const addComment = async (req: Request, res: Response) => {
       attachments: files.map(file => file.url)
     }
     complaint.comments.push(newComment)
-
-    // Update complaint attachments if files were uploaded
-
     await complaint.save()
 
-    // Notify relevant users
-    await notifyNewComment(complaint, userId, userRole)
 
     res.status(200).json({
       message: "Comment added successfully",
@@ -400,65 +367,6 @@ export const addComment = async (req: Request, res: Response) => {
   }
 }
 
-// Add files to complaint
-// export const addFiles = async (req: Request, res: Response) => {
-//   try {
-//     const { id } = req.params
-//     const userId = req.user.id
-//     const userRole = req.user.role
-
-//     const complaint = await Complaint.findById(id)
-//     if (!complaint) {
-//       res.status(404).json({ message: "Complaint not found" })
-//       return
-//     }
-
-//     // Check if user has access to add files to this complaint
-//     const hasAccess = await canUserAccessComplaint(userId, userRole, complaint)
-//     if (!hasAccess) {
-//       res.status(403).json({ message: "Access denied" })
-//       return
-//     }
-
-//     if (!req..body.files || Object.keys(req.body.files).length === 0) {
-//       res.status(400).json({ message: "No files were uploaded" })
-//       return
-//     }
-
-//     try {
-//       const uploadResult = await fileUpload.handleFiles(req)
-//       const uploadedFiles = uploadResult.files.map(file => `/uploads/complaints/${file.fileName}`)
-
-//       // Update complaint attachments
-//       complaint.attachments = [...(complaint.attachments || []), ...uploadedFiles]
-
-//       // Add a comment about the file upload
-//       complaint.comments.push({
-//         text: `Files uploaded: ${uploadResult.files.map(f => f.originalName).join(", ")}`,
-//         user: userId,
-//         role: userRole,
-//         createdAt: new Date(),
-//         attachments: uploadedFiles
-//       })
-
-//       await complaint.save()
-
-//       res.status(200).json({
-//         message: "Files uploaded successfully",
-//         files: uploadedFiles
-//       })
-//     } catch (error) {
-//       console.error("File upload error:", error)
-//       res.status(400).json({
-//         message: "Error uploading files",
-//         error: error instanceof Error ? error.message : "Unknown error"
-//       })
-//     }
-//   } catch (error) {
-//     console.error("Add files error:", error)
-//     res.status(500).json({ message: "Server error adding files" })
-//   }
-// }
 
 // Remove file from complaint
 export const removeFile = async (req: Request, res: Response) => {
@@ -490,12 +398,7 @@ export const removeFile = async (req: Request, res: Response) => {
       attachments: (comment.attachments || []).filter(url => url !== fileUrl)
     }))
 
-    // Delete the actual file
-    const fileName = path.basename(fileUrl)
-    const filePath = path.join(uploadDir, fileName)
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath)
-    }
+
 
     await complaint.save()
 
@@ -521,12 +424,6 @@ export const escalateComplaint = async (req: Request, res: Response) => {
       res.status(404).json({ message: "Complaint not found" })
       return
     }
-
-    // Check if user has permission to escalate
-    // if (!canEscalateComplaint(userRole, complaint.escalationLevel)) {
-    //   res.status(403).json({ message: "You don't have permission to escalate this complaint" })
-    //   return
-    // }
 
     // Update escalation details
     const newLevel = getNextEscalationLevel(complaint.escalationLevel)
@@ -564,7 +461,6 @@ export const escalateComplaint = async (req: Request, res: Response) => {
     await complaint.save()
 
     // Notify relevant users
-    await notifyEscalation(complaint, newLevel)
 
     res.status(200).json({
       message: "Complaint escalated successfully",
@@ -606,42 +502,7 @@ const canUserAccessComplaint = async (userId: string, userRole: string, complain
   return false
 }
 
-const isValidStatusTransition = (currentStatus: ComplaintStatus, newStatus: ComplaintStatus, userRole: string) => {
-  // Define valid status transitions based on user role
-  const validTransitions: Record<string, ComplaintStatus[]> = {
-    sector_admin: [
-      ComplaintStatus.IN_PROGRESS,
-      ComplaintStatus.NEEDS_INFO,
-      ComplaintStatus.RESOLVED,
-      ComplaintStatus.REJECTED
-    ],
-    district_admin: [
-      ComplaintStatus.IN_PROGRESS,
-      ComplaintStatus.NEEDS_INFO,
-      ComplaintStatus.RESOLVED,
-      ComplaintStatus.REJECTED
-    ],
-    org_admin: [
-      ComplaintStatus.IN_PROGRESS,
-      ComplaintStatus.NEEDS_INFO,
-      ComplaintStatus.RESOLVED,
-      ComplaintStatus.REJECTED
-    ],
-    citizen: [ComplaintStatus.NEEDS_INFO] // Citizens can only respond to info requests
-  }
 
-  return validTransitions[userRole]?.includes(newStatus) || false
-}
-
-const canEscalateComplaint = (userRole: string, currentLevel: EscalationLevel) => {
-  const escalationPermissions: Record<string, EscalationLevel[]> = {
-    sector_admin: [EscalationLevel.SECTOR],
-    district_admin: [EscalationLevel.DISTRICT],
-    org_admin: [EscalationLevel.ORGANIZATION]
-  }
-
-  return escalationPermissions[userRole]?.includes(currentLevel) || false
-}
 
 const getNextEscalationLevel = (currentLevel: EscalationLevel): EscalationLevel => {
   const escalationFlow = {
@@ -652,26 +513,6 @@ const getNextEscalationLevel = (currentLevel: EscalationLevel): EscalationLevel 
   return escalationFlow[currentLevel]
 }
 
-// Notification helper functions
-const notifyStatusUpdate = async (complaint: any, status: ComplaintStatus, updatedByRole: string) => {
-  // Implementation depends on your notification system
-  // Example:
-  // await createComplaintUpdateNotification(complaint.citizen, complaint._id, 'status_update')
-}
-
-const notifyNewComment = async (complaint: any, commenterId: string, commenterRole: string) => {
-  // Implementation depends on your notification system
-  // Example:
-  // const notifyUserId = commenterRole === 'citizen' ? complaint.assignedTo : complaint.citizen
-  // await createComplaintUpdateNotification(notifyUserId, complaint._id, 'new_comment')
-}
-
-const notifyEscalation = async (complaint: any, newLevel: EscalationLevel) => {
-  // Implementation depends on your notification system
-  // Example:
-  // const notifyUserId = getAdminIdForLevel(newLevel)
-  // await createComplaintUpdateNotification(notifyUserId, complaint._id, 'escalation')
-}
 
 export default {
   createComplaint,
@@ -682,7 +523,6 @@ export default {
   getComplaintDetails,
   updateComplaintStatus,
   addComment,
-  // addFiles,
   removeFile,
   escalateComplaint
 }

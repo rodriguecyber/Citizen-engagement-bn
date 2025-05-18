@@ -1,34 +1,21 @@
 import nodemailer from "nodemailer"
-
-// Configure email transporter
-// In a real app, you would use your actual SMTP settings
+import dotenv from 'dotenv'
+dotenv.config()
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.example.com",
+  host: process.env.SMTP_HOST!,
   port: Number.parseInt(process.env.SMTP_PORT || "587"),
   secure: false,
   auth: {
-    user: process.env.SMTP_USER || "noreply@citizenengagement.rw",
-    pass: process.env.SMTP_PASSWORD || "your-password",
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD ,
   },
 })
 
-// Development mode - use hardcoded settings for now
-const DEV_MODE = process.env.NODE_ENV !== "production"
 
 // Send email function
 export const sendEmail = async (to: string, subject: string, message: string, html?: string) => {
   try {
-    if (DEV_MODE) {
-      // In development mode, just log the email
-      console.log("====== EMAIL NOTIFICATION ======")
-      console.log(`To: ${to}`)
-      console.log(`Subject: ${subject}`)
-      console.log(`Message: ${message}`)
-      console.log("===============================")
-      return { success: true, info: "Email logged in development mode" }
-    }
-
-    // For production, actually send email
+   
     const mailOptions = {
       from: '"Citizen Engagement Platform" <noreply@citizenengagement.rw>',
       to,

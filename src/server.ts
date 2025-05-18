@@ -16,7 +16,7 @@ dotenv.config()
 // Hardcoded environment variables (for development only)
 const HARDCODED_PORT = 5000
 const HARDCODED_MONGODB_URI = "mongodb://localhost:27017/citizen-engagement"
-const HARDCODED_JWT_SECRET = "citizen-engagement-jwt-secret-key-2024"
+
 
 const app = express()
 const PORT = process.env.PORT || HARDCODED_PORT
