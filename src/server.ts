@@ -13,13 +13,10 @@ import userRoutes from "./routes/user.routes"
 // Load environment variables
 dotenv.config()
 
-// Hardcoded environment variables (for development only)
-const HARDCODED_PORT = 5000
-const HARDCODED_MONGODB_URI = "mongodb://localhost:27017/citizen-engagement"
 
 
 const app = express()
-const PORT = process.env.PORT || HARDCODED_PORT
+const PORT = process.env.PORT 
 
 // Middleware
 app.use(cors())
@@ -27,7 +24,7 @@ app.use(express.json())
 
 // Database connection
 mongoose
-  .connect(process.env.MONGODB_URI || HARDCODED_MONGODB_URI)
+  .connect(process.env.MONGODB_URI!)
   .then(() => console.log("Connected to MongoDB"))
   .catch((err) => console.error("MongoDB connection error:", err))
 
